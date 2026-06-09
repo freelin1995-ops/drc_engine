@@ -1,0 +1,12 @@
+build/
+*.o
+*.obj
+*.so
+*.a
+*.dylib
+*.exe
+.DS_Store
+./cache
+.venv
+drc-course
+scripts

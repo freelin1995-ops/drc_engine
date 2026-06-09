@@ -1,0 +1,39 @@
+-- Example DRC script for drc-check
+--
+-- Usage: drc-check example.drc
+-- Provide a GDS file via source() and set output via target()
+
+source("testdata/test_drc.gds")    -- Input GDS
+target("/tmp/example_output.gds")     -- Output path
+
+-- Read layers
+local metal1 = input(10, 0)      -- 5 fingers, widths 0.05..0.25
+local block  = input(30, 0)      -- 2x2 um square
+
+-- Boolean operations
+local overlap = metal1 & block
+local merged  = metal1 | block
+
+-- DRC checks (values in microns)
+local width_violations  = metal1:width(0.10)
+local space_violations  = metal1:space(0.10)
+
+-- Sizing
+local wide = metal1:sized(0.05)
+
+-- Write results to output layers
+metal1:output(1, 0)
+block:output(2, 0)
+overlap:output(10, 0)
+merged:output(11, 0)
+wide:output(20, 0)
+
+-- Write violation markers
+width_violations:output(100, 0)
+space_violations:output(101, 0)
+
+print("DRC script completed successfully")
+print("Output: /tmp/example_output.gds")
+
+-- Flush output to file
+write()

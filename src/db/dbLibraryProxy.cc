@@ -1,0 +1,328 @@
+
+/*
+
+  KLayout Layout Viewer
+  Copyright (C) 2006-2026 Matthias Koefferlein
+
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+
+*/
+
+
+#include "dbLibraryProxy.h"
+#include "dbColdProxy.h"
+#include "dbLibraryManager.h"
+#include "dbLibrary.h"
+#include "dbLayout.h"
+#include "dbLayoutUtils.h"
+
+namespace db
+{
+
+LibraryProxy::LibraryProxy (db::cell_index_type ci, db::Layout &layout, lib_id_type lib_id, cell_index_type lib_cell_index)
+  : Cell (ci, layout), m_lib_id (lib_id), m_library_cell_index (lib_cell_index)
+{
+  db::Library *lib = db::LibraryManager::instance ().lib (lib_id);
+  if (lib) {
+    lib->register_proxy (this, &layout);
+  }
+  layout.register_lib_proxy (this);
+}
+
+LibraryProxy::~LibraryProxy ()
+{
+  try {
+    if (layout ()) {
+      layout ()->unregister_lib_proxy (this);
+    }
+    if (db::LibraryManager::initialized ()) {
+      db::Library *lib = db::LibraryManager::instance ().lib (m_lib_id);
+      if (lib) {
+        lib->unregister_proxy (this, layout ());
+      }
+    }
+  } catch (...) {
+    //  ignore exceptions (may happen due to broken PCell instantiations)
+  }
+}
+
+void 
+LibraryProxy::unregister ()
+{
+  if (layout ()) {
+    layout ()->unregister_lib_proxy (this);
+  }
+  if (db::LibraryManager::initialized ()) {
+    db::Library *lib = db::LibraryManager::instance ().lib (m_lib_id);
+    if (lib) {
+      lib->retire_proxy (this);
+    }
+  }
+}
+
+void 
+LibraryProxy::reregister ()
+{
+  if (layout ()) {
+    layout ()->register_lib_proxy (this);
+  }
+  if (db::LibraryManager::initialized ()) {
+    db::Library *lib = db::LibraryManager::instance ().lib (m_lib_id);
+    if (lib) {
+      lib->unretire_proxy (this);
+    }
+  }
+}
+
+void 
+LibraryProxy::remap (lib_id_type lib_id, cell_index_type lib_cell_index)
+{
+  if (lib_id == m_lib_id && m_library_cell_index == lib_cell_index) {
+    //  we trigger an update in any case to implement the library's "refresh"
+    update ();
+    return;
+  }
+
+  if (layout ()) {
+    layout ()->unregister_lib_proxy (this);
+  }
+  db::Library *old_lib = db::LibraryManager::instance ().lib (m_lib_id);
+  if (old_lib) {
+    old_lib->unregister_proxy (this, layout ());
+  }
+
+  m_lib_id = lib_id;
+  m_library_cell_index = lib_cell_index;
+
+  db::Library *lib = db::LibraryManager::instance ().lib (m_lib_id);
+  if (lib) {
+    lib->register_proxy (this, layout ());
+  }
+  if (layout ()) {
+    layout ()->register_lib_proxy (this);
+  }
+
+  update ();
+}
+
+Cell *
+LibraryProxy::clone (Layout &layout) const
+{
+  Cell *cell = new LibraryProxy (db::Cell::cell_index (), layout, lib_id (), library_cell_index ());
+  //  copy the cell content
+  *cell = *this;
+  return cell;
+}
+
+std::vector<int> 
+LibraryProxy::get_layer_indices (db::Layout &layout, db::ImportLayerMapping *layer_mapping)
+{
+  std::vector<int> m_layer_indices; // TODO: should be somewhere "global" ..
+
+  Library *lib = LibraryManager::instance ().lib (lib_id ());
+  tl_assert (lib != 0);
+  tl_assert (lib->layout ().is_valid_cell_index (library_cell_index ()));
+
+  const db::Cell &cell = lib->layout ().cell (library_cell_index ());
+
+  bool reuse_layer_list = (m_layer_indices.size () == lib->layout ().layers ());
+  for (unsigned int i = 0; i < m_layer_indices.size () && reuse_layer_list; ++i) {
+    reuse_layer_list = layout.is_valid_layer (m_layer_indices[i]) 
+                         && lib->layout ().is_valid_layer (i)
+                         && layout.get_properties (m_layer_indices[i]).log_equal (lib->layout ().get_properties (i));
+  }
+
+  if (! reuse_layer_list) {
+
+    db::DirectLayerMapping direct_layer_mapping (&layout);
+    if (! layer_mapping) {
+      layer_mapping = &direct_layer_mapping;
+    }
+
+    m_layer_indices.clear ();
+    m_layer_indices.reserve (lib->layout ().layers ());
+
+    for (unsigned int i = 0; i < lib->layout ().layers (); ++i) {
+
+      if (i == lib->layout ().guiding_shape_layer ()) {
+
+        //  map guiding shape layer
+        m_layer_indices.push_back ((int) layout.guiding_shape_layer ());
+
+      } else if (i == lib->layout ().error_layer ()) {
+
+        //  map guiding shape layer
+        m_layer_indices.push_back ((int) layout.error_layer ());
+
+      } else if (! lib->layout ().is_valid_layer (i) || cell.bbox (i).empty ()) {
+
+        m_layer_indices.push_back (-1);
+
+      } else {
+
+        std::pair<bool, unsigned int> lm = layer_mapping->map_layer (lib->layout ().get_properties (i));
+        if (lm.first) {
+          m_layer_indices.push_back (lm.second);
+        } else {
+          m_layer_indices.push_back (layout.waste_layer ());
+        }
+
+      }
+
+    }
+
+  }
+
+  return m_layer_indices;
+}
+
+void 
+LibraryProxy::update (db::ImportLayerMapping *layer_mapping)
+{
+  tl_assert (layout () != 0);
+  std::vector<int> layer_indices (get_layer_indices (*layout (), layer_mapping));
+
+  Library *lib = LibraryManager::instance ().lib (lib_id ());
+  const db::Cell &source_cell = lib->layout ().cell (library_cell_index ());
+
+  clear_shapes ();
+  clear_insts ();
+
+  for (unsigned int l = 0; l < lib->layout ().layers (); ++l) {
+    if (layer_indices [l] >= 0) {
+      shapes ((unsigned int) layer_indices [l]).assign_transformed (source_cell.shapes (l), db::ICplxTrans (lib->layout ().dbu () / layout ()->dbu ()));
+    }
+  }
+
+  for (Cell::const_iterator i = source_cell.begin (); ! i.at_end (); ++i) {
+
+    db::CellInstArray inst = i->cell_inst ();
+
+    Library *real_lib = lib;
+    cell_index_type real_cil = inst.object ().cell_index ();
+
+    //  use the "final lib", so we refer to the actual lib instead
+    //  of building chains of lib references
+    LibraryProxy *lp;
+    while ((lp = dynamic_cast<LibraryProxy *> (&real_lib->layout ().cell (real_cil))) != 0) {
+      real_cil = lp->library_cell_index ();
+      real_lib = db::LibraryManager::instance ().lib (lp->lib_id ());
+    }
+
+    ColdProxy *cp = dynamic_cast<ColdProxy *> (&real_lib->layout ().cell (real_cil));
+    if (cp) {
+
+      //  The final item is a cold proxy ("<defunct>" cell) - treat it like
+      //  a library proxy as it may become one in the future, but replace it
+      //  by a cold proxy now.
+
+      auto p = layout ()->find_cold_proxy (cp->context_info ());
+      if (p.first) {
+        //  reuse existing proxy
+        inst.object ().cell_index (p.second);
+      } else {
+        //  create a new proxy, reusing the first library proxy's replica
+        inst.object ().cell_index (layout ()->get_lib_proxy (real_lib, real_cil));
+        layout ()->create_cold_proxy_as (cp->context_info (), inst.object ().cell_index ());
+      }
+
+    } else {
+      inst.object ().cell_index (layout ()->get_lib_proxy (real_lib, real_cil));
+    }
+
+    inst.transform_into (db::ICplxTrans (lib->layout ().dbu () / layout ()->dbu ()));
+
+    if (i->has_prop_id ()) {
+      insert (db::CellInstArrayWithProperties (inst, i->prop_id ()));
+    } else {
+      insert (inst);
+    }
+
+  }
+}
+
+bool
+LibraryProxy::can_skip_replica () const
+{
+  const Library *lib = LibraryManager::instance ().lib (lib_id ());
+  return lib && ! lib->replicate ();
+}
+
+std::string 
+LibraryProxy::get_basic_name () const
+{
+  Library *lib = LibraryManager::instance ().lib (lib_id ());
+  if (lib) {
+    if (! lib->layout ().is_valid_cell_index (library_cell_index ())) {
+      return "<defunct>";
+    } else {
+      const db::Cell &lib_cell = lib->layout ().cell (library_cell_index ());
+      return lib_cell.get_basic_name ();
+    }
+  } else {
+    return Cell::get_basic_name ();
+  }
+}
+
+std::string
+LibraryProxy::get_variant_name () const
+{
+  Library *lib = LibraryManager::instance ().lib (lib_id ());
+  if (lib) {
+    if (! lib->layout ().is_valid_cell_index (library_cell_index ())) {
+      return "<defunct>";
+    } else {
+      const db::Cell &lib_cell = lib->layout ().cell (library_cell_index ());
+      return lib_cell.get_variant_name ();
+    }
+  } else {
+    return Cell::get_variant_name ();
+  }
+}
+
+std::string
+LibraryProxy::get_display_name () const
+{
+  Library *lib = LibraryManager::instance ().lib (lib_id ());
+  if (lib) {
+    if (! lib->layout ().is_valid_cell_index (library_cell_index ())) {
+      return lib->get_name () + "." + "<defunct>";
+    } else {
+      const db::Cell &lib_cell = lib->layout ().cell (library_cell_index ());
+      return lib->get_name () + "." + lib_cell.get_display_name ();
+    }
+  } else {
+    return Cell::get_display_name ();
+  }
+}
+
+std::string
+LibraryProxy::get_qualified_name () const
+{
+  Library *lib = LibraryManager::instance ().lib (lib_id ());
+  if (lib) {
+    if (! lib->layout ().is_valid_cell_index (library_cell_index ())) {
+      return lib->get_name () + "." + "<defunct>";
+    } else {
+      const db::Cell &lib_cell = lib->layout ().cell (library_cell_index ());
+      return lib->get_name () + "." + lib_cell.get_qualified_name ();
+    }
+  } else {
+    return Cell::get_qualified_name ();
+  }
+}
+
+}
+

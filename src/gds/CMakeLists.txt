@@ -1,0 +1,5 @@
+file(GLOB GDS_SOURCES ${CMAKE_SOURCE_DIR}/src/gds/dbGDS2*.cc)
+add_library(gds STATIC ${GDS_SOURCES})
+target_include_directories(gds PUBLIC ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/include/gds)
+target_link_libraries(gds PUBLIC db tl)
+target_compile_definitions(gds PUBLIC MAKE_DB_PLUGIN_LIBRARY)
