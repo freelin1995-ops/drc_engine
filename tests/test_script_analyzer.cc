@@ -6,25 +6,28 @@
 #include <unistd.h>
 #include "mpi/script_analyzer.h"
 
-static std::string write_temp_script(const std::string& content) {
-    char path[] = "/tmp/drc_test_XXXXXX";
-    int fd = mkstemp(path);
-    if (fd < 0) { perror("mkstemp"); exit(1); }
-    auto bytes = write(fd, content.data(), content.size());
-    (void)bytes;
-    close(fd);
-    return std::string(path);
-}
+struct TempScript {
+    std::string path;
+    TempScript(const std::string& content) {
+        char tmpl[] = "/tmp/drc_test_XXXXXX";
+        int fd = mkstemp(tmpl);
+        write(fd, content.data(), content.size());
+        close(fd);
+        path = tmpl;
+    }
+    ~TempScript() { std::remove(path.c_str()); }
+};
 
 static void test_chain_decomposition() {
-    std::string path = write_temp_script(R"(
+    TempScript s(R"(
 source("input.gds")
 target("out.gds")
 local w = input(10, 0):sized(0.1):width(0.5)
 w:output(1, 0)
 write()
 )");
-    drc::ScriptAnalyzer analyzer(path);
+    drc::ScriptAnalyzer analyzer(s.path);
+    assert(analyzer.valid());
     analyzer.normalize();
     analyzer.build_ref_table();
 
@@ -39,12 +42,11 @@ write()
 
     assert(analyzer.has_downstream_refs("__t1", -1));
 
-    std::remove(path.c_str());
     std::cout << "PASS: test_chain_decomposition" << std::endl;
 }
 
 static void test_no_chain() {
-    std::string path = write_temp_script(R"(
+    TempScript s(R"(
 source("a.gds")
 target("b.gds")
 local a = input(10, 0)
@@ -54,7 +56,8 @@ local w = merged:width(0.5)
 w:output(1, 0)
 write()
 )");
-    drc::ScriptAnalyzer analyzer(path);
+    drc::ScriptAnalyzer analyzer(s.path);
+    assert(analyzer.valid());
     analyzer.normalize();
     analyzer.build_ref_table();
 
@@ -64,26 +67,25 @@ write()
     assert(analyzer.has_downstream_refs("a", -1));
     assert(analyzer.has_downstream_refs("merged", -1));
 
-    std::remove(path.c_str());
     std::cout << "PASS: test_no_chain" << std::endl;
 }
 
 static void test_expr_injection() {
-    std::string path = write_temp_script(R"(
+    TempScript s(R"(
 source("x.gds")
 target("y.gds")
 local a = input(10, 0)
 local merged = a | b
 write()
 )");
-    drc::ScriptAnalyzer analyzer(path);
+    drc::ScriptAnalyzer analyzer(s.path);
+    assert(analyzer.valid());
     analyzer.normalize();
 
     std::string norm = analyzer.normalized_script();
     assert(norm.find("__expr(\"a | b\")") != std::string::npos);
     assert(norm.find("__expr(\"input") == std::string::npos);
 
-    std::remove(path.c_str());
     std::cout << "PASS: test_expr_injection" << std::endl;
 }
 

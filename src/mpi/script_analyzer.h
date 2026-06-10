@@ -16,6 +16,7 @@ class ScriptAnalyzer {
 public:
     ScriptAnalyzer(const std::string& script_path);
 
+    bool valid() const { return m_valid; }
     void normalize();
     void build_ref_table();
 
@@ -27,7 +28,7 @@ public:
     bool has_downstream_refs(const std::string& var, int def_line) const;
     bool is_input_line(int line_num) const;
     std::string get_assigned_var(int line_num) const;
-    int num_lines() const { return (int)m_lines.size(); }
+    int num_lines() const { return static_cast<int>(m_lines.size()); }
 
 private:
     struct LineInfo {
@@ -42,10 +43,12 @@ private:
     std::vector<std::string> m_lines_str;
     std::string m_normalized_script;
     std::unordered_map<std::string, RefEntry> m_ref_table;
+    bool m_valid = false;
+    bool m_normalized = false;
     int m_temp_counter = 0;
 
     void split_lines(const std::string& script);
-    std::string decompose_chains(const std::string& line, int line_num);
+    std::string decompose_chains(const std::string& line);
     std::string strip_local(const std::string& line);
     bool is_comment_or_empty(const std::string& line) const;
     std::string extract_assigned_var(const std::string& line) const;

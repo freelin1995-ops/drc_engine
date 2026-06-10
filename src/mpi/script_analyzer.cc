@@ -18,7 +18,7 @@ static std::pair<std::string, std::string> split_last_method_call(const std::str
     int depth = 0;
     int last_colon = -1;
     int paren_start = -1;
-    for (int i = (int)expr.size() - 1; i >= 0; i--) {
+    for (int i = static_cast<int>(expr.size()) - 1; i >= 0; i--) {
         if (expr[i] == ')') depth++;
         else if (expr[i] == '(') {
             depth--;
@@ -50,6 +50,7 @@ ScriptAnalyzer::ScriptAnalyzer(const std::string& script_path) {
     buffer << file.rdbuf();
     m_original_script = buffer.str();
     split_lines(m_original_script);
+    m_valid = true;
 }
 
 void ScriptAnalyzer::split_lines(const std::string& script) {
@@ -92,7 +93,7 @@ std::string ScriptAnalyzer::extract_assigned_var(const std::string& line) const 
 std::vector<std::string> ScriptAnalyzer::extract_referenced_vars(const std::string& expr) const {
     std::vector<std::string> result;
     std::regex var_re(R"(\b([a-zA-Z_][a-zA-Z0-9_]*)\b)");
-    std::set<std::string> keywords = {
+    static const std::set<std::string> keywords = {
         "local", "input", "source", "target", "write",
         "return", "nil", "true", "false"
     };
@@ -132,8 +133,7 @@ bool ScriptAnalyzer::is_input_call(const std::string& line) const {
     return rhs.find("input(") == 0 || rhs.find("input (") == 0;
 }
 
-std::string ScriptAnalyzer::decompose_chains(const std::string& line, int line_num) {
-    (void)line_num;
+std::string ScriptAnalyzer::decompose_chains(const std::string& line) {
     auto eq_pos = line.find('=');
     if (eq_pos == std::string::npos) {
         return line;
@@ -202,7 +202,7 @@ void ScriptAnalyzer::normalize() {
         line = strip_local(line);
 
         if (line.find('=') != std::string::npos) {
-            std::string result = decompose_chains(line, (int)i);
+            std::string result = decompose_chains(line);
 
             if (!result.empty()) {
                 LineInfo li;
@@ -219,6 +219,7 @@ void ScriptAnalyzer::normalize() {
     }
 
     build_normalized();
+    m_normalized = true;
 }
 
 void ScriptAnalyzer::build_normalized() {
@@ -246,9 +247,10 @@ void ScriptAnalyzer::build_normalized() {
 }
 
 void ScriptAnalyzer::build_ref_table() {
+    if (!m_normalized) normalize();
     m_ref_table.clear();
 
-    for (int i = 0; i < (int)m_lines.size(); i++) {
+    for (int i = 0; i < static_cast<int>(m_lines.size()); i++) {
         const auto& li = m_lines[i];
         if (li.assigned_var.empty())
             continue;
@@ -258,7 +260,7 @@ void ScriptAnalyzer::build_ref_table() {
         entry.def_line = i;
         entry.is_input = li.is_input;
 
-        for (int j = i + 1; j < (int)m_lines.size(); j++) {
+        for (int j = i + 1; j < static_cast<int>(m_lines.size()); j++) {
             auto refs = extract_referenced_vars(m_lines[j].text);
             for (const auto& ref : refs) {
                 if (ref == li.assigned_var) {
@@ -286,13 +288,13 @@ bool ScriptAnalyzer::has_downstream_refs(const std::string& var, int def_line) c
 }
 
 bool ScriptAnalyzer::is_input_line(int line_num) const {
-    if (line_num < 0 || line_num >= (int)m_lines.size())
+    if (line_num < 0 || line_num >= static_cast<int>(m_lines.size()))
         return false;
     return m_lines[line_num].is_input;
 }
 
 std::string ScriptAnalyzer::get_assigned_var(int line_num) const {
-    if (line_num < 0 || line_num >= (int)m_lines.size())
+    if (line_num < 0 || line_num >= static_cast<int>(m_lines.size()))
         return "";
     return m_lines[line_num].assigned_var;
 }
