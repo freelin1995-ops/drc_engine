@@ -9,6 +9,11 @@ option(DRC_BUILD_TESTS "Build tests" ON)
 
 find_package(Lua REQUIRED)
 find_package(ZLIB REQUIRED)
+option(DRC_USE_MPI "Build with MPI distributed support" OFF)
+
+if(DRC_USE_MPI)
+    find_package(MPI REQUIRED COMPONENTS CXX)
+endif()
 
 add_library(sol INTERFACE)
 target_include_directories(sol INTERFACE ${CMAKE_SOURCE_DIR}/3rd/sol)
@@ -22,6 +27,10 @@ add_subdirectory(src/drc)
 if(DRC_BUILD_CLI)
     add_subdirectory(src/cli)
 endif()
+if(DRC_USE_MPI)
+    add_subdirectory(src/mpi)
+endif()
+
 if(DRC_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)

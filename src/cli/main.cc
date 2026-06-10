@@ -1,10 +1,32 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
-#include <sol/sol.hpp>
+
+#ifdef DRC_USE_MPI
+#include <mpi.h>
+#include "mpi/mpi_master.h"
+#include "mpi/mpi_worker.h"
+#endif
+
 #include "drc/lua_binding.h"
+#include "drc/engine.h"
+#include <sol/sol.hpp>
 
 int main(int argc, char* argv[]) {
+#ifdef DRC_USE_MPI
+    MPI_Init(&argc, &argv);
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    if (rank == 0) {
+        int ret = drc::run_master(argc, argv);
+        MPI_Finalize();
+        return ret;
+    } else {
+        int ret = drc::run_worker();
+        MPI_Finalize();
+        return ret;
+    }
+#else
     if (argc < 2) {
         std::cerr << "Usage: drc-check <script.lua>" << std::endl;
         return 1;
@@ -12,21 +34,17 @@ int main(int argc, char* argv[]) {
 
     std::ifstream file(argv[1]);
     if (!file) {
-        std::cerr << "Error: Cannot open script file: " << argv[1] << std::endl;
+        std::cerr << "Cannot open " << argv[1] << std::endl;
         return 1;
     }
+
     std::stringstream ss;
     ss << file.rdbuf();
     std::string script = ss.str();
 
     sol::state lua;
-    lua.open_libraries(
-        sol::lib::base,
-        sol::lib::math,
-        sol::lib::string,
-        sol::lib::table,
-        sol::lib::os
-    );
+    lua.open_libraries(sol::lib::base, sol::lib::math,
+                       sol::lib::string, sol::lib::table, sol::lib::os);
 
     drc::DRCEngine engine;
     drc::bind_drc_engine(lua, engine);
@@ -37,6 +55,6 @@ int main(int argc, char* argv[]) {
         std::cerr << "DRC script error: " << err.what() << std::endl;
         return 1;
     }
-
     return 0;
+#endif
 }

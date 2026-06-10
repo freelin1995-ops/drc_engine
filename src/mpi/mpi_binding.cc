@@ -243,7 +243,7 @@ DRCLayer clip_to_tile(const DRCLayer& global, const db::Box& tile, double halo, 
         return global.interacting(DRCLayer(new db::Region(tile_region)));
     } else if (global.type() == DRCLayer::Texts) {
         auto result = std::make_unique<db::Texts>();
-        for (auto it = global.texts()->begin(); it != global.texts()->end(); ++it) {
+        for (auto it = global.texts()->begin(); !it.at_end(); ++it) {
             if (expanded.contains(it->box().center())) {
                 result->insert(*it);
             }

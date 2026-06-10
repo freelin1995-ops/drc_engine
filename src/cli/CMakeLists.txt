@@ -7,3 +7,8 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
 else()
     target_link_libraries(drc-check drc rdb gds db tl ${LUA_LIBRARIES})
 endif()
+
+if(DRC_USE_MPI)
+    target_link_libraries(drc-check mpi MPI::MPI_CXX)
+    target_compile_definitions(drc-check PRIVATE DRC_USE_MPI)
+endif()
