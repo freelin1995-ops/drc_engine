@@ -20,3 +20,28 @@ else()
     target_link_libraries(test_mpi_serialize drc rdb gds db tl)
 endif()
 add_test(NAME mpi_serialize COMMAND test_mpi_serialize)
+
+add_executable(test_integration test_integration.cc
+    ../src/mpi/script_analyzer.cc
+)
+target_include_directories(test_integration PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/src
+)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_link_libraries(test_integration drc rdb -Wl,--whole-archive gds -Wl,--no-whole-archive db tl)
+    target_link_options(test_integration PRIVATE -Wl,--unresolved-symbols=ignore-in-object-files)
+else()
+    target_link_libraries(test_integration drc rdb gds db tl)
+endif()
+add_test(NAME integration COMMAND test_integration)
+set_tests_properties(integration PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+add_executable(gen_large_layout gen_large_layout.cc)
+target_include_directories(gen_large_layout PRIVATE ${CMAKE_SOURCE_DIR}/include)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_link_libraries(gen_large_layout drc rdb -Wl,--whole-archive gds -Wl,--no-whole-archive db tl)
+    target_link_options(gen_large_layout PRIVATE -Wl,--unresolved-symbols=ignore-in-object-files)
+else()
+    target_link_libraries(gen_large_layout drc rdb gds db tl)
+endif()

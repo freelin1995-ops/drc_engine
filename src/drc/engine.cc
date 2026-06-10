@@ -64,6 +64,8 @@ DRCLayer DRCLayer::operator|(const DRCLayer& other) const {
         return DRCLayer(new db::Region(*m_region | *other.m_region));
     if (m_type == Edges && other.m_type == Edges && m_edges && other.m_edges)
         return DRCLayer(new db::Edges(*m_edges | *other.m_edges));
+    if (m_type == EdgePairs && other.m_type == EdgePairs && m_edge_pairs && other.m_edge_pairs)
+        return DRCLayer(new db::EdgePairs(*m_edge_pairs + *other.m_edge_pairs));
     return DRCLayer();
 }
 
@@ -143,6 +145,8 @@ DRCLayer DRCLayer::interacting(const DRCLayer& other) const {
         return DRCLayer(new db::Edges(m_edges->selected_interacting(*other.m_region)));
     if (m_type == Edges && other.m_type == Edges && m_edges && other.m_edges)
         return DRCLayer(new db::Edges(m_edges->selected_interacting(*other.m_edges)));
+    if (m_type == EdgePairs && other.m_type == Region && m_edge_pairs && other.m_region)
+        return DRCLayer(new db::EdgePairs(m_edge_pairs->selected_interacting(*other.m_region)));
     return DRCLayer();
 }
 

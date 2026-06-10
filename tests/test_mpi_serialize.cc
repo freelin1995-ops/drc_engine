@@ -64,9 +64,15 @@ static void test_edges_roundtrip() {
     assert(original.edges() != nullptr);
 
     auto bytes = drc::serialize_drclayer(original);
+    assert(bytes.size() > 5);
+    printf("  edges serialized %zu bytes, first=0x%02x\n", bytes.size(), (unsigned char)bytes[0]);
     auto restored = drc::deserialize_drclayer(bytes.data(), bytes.size());
     assert(restored.type() == drc::DRCLayer::Edges);
     assert(restored.edges() != nullptr);
+    assert(restored.edges()->count() == 1);
+    if (restored.edges()->count() != 1) {
+        printf("  FAIL: edges count = %zu (expected 1)\n", restored.edges()->count());
+    }
 
     std::cout << "PASS: test_edges_roundtrip" << std::endl;
 }
@@ -77,9 +83,15 @@ static void test_edgepairs_roundtrip() {
     drc::DRCLayer original(eps.release());
 
     auto bytes = drc::serialize_drclayer(original);
+    assert(bytes.size() > 5);
+    printf("  edgepairs serialized %zu bytes, first=0x%02x\n", bytes.size(), (unsigned char)bytes[0]);
     auto restored = drc::deserialize_drclayer(bytes.data(), bytes.size());
     assert(restored.type() == drc::DRCLayer::EdgePairs);
     assert(restored.edge_pairs() != nullptr);
+    assert(restored.edge_pairs()->count() == 1);
+    if (restored.edge_pairs()->count() != 1) {
+        printf("  FAIL: edgepairs count = %zu (expected 1)\n", restored.edge_pairs()->count());
+    }
 
     std::cout << "PASS: test_edgepairs_roundtrip" << std::endl;
 }

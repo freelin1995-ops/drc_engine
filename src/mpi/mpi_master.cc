@@ -74,7 +74,8 @@ int run_master(int argc, char* argv[]) {
     DRCEngine engine;
     sol::state lua;
     lua.open_libraries(sol::lib::base, sol::lib::math,
-                       sol::lib::string, sol::lib::table);
+                       sol::lib::string, sol::lib::table,
+                       sol::lib::os);
 
     MPIContext ctx;
     ctx.num_workers = num_workers;

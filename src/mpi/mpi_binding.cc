@@ -188,10 +188,13 @@ void bind_drc_engine_mpi(sol::state& lua, DRCEngine& engine, MPIContext* ctx) {
 }
 
 DRCLayer mpi_evaluate_expr(const std::string& expr, int num_workers) {
-    mpi_broadcast(0, MPIMsgType::EXECUTE_RHS, expr.data(), (int)expr.size());
+    int active = std::min(num_workers, (int)g_mpi_ctx->tiles.size());
+    for (int i = 0; i < active; i++) {
+        mpi_send(i + 1, MPIMsgType::EXECUTE_RHS, expr.data(), (int)expr.size());
+    }
 
     std::vector<DRCLayer> tile_results;
-    for (int i = 0; i < num_workers; i++) {
+    for (int i = 0; i < active; i++) {
         auto msg = mpi_recv(i + 1);
         if (msg.header.size > 0) {
             auto layer = deserialize_drclayer(msg.payload.data(), msg.payload.size());
