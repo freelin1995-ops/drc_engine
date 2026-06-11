@@ -2,6 +2,7 @@
 #include "mpi/mpi_binding.h"
 #include "mpi/mpi_protocol.h"
 #include "mpi/script_analyzer.h"
+#include "mpi/halo_inferrer.h"
 #include "drc/engine.h"
 #include <iostream>
 #include <mpi.h>
@@ -66,8 +67,12 @@ int run_master(int argc, char* argv[]) {
     if (halo_override >= 0.0) {
         halo = halo_override;
     } else {
-        std::cerr << "Warning: no halo inferrer available, using 0.0" << std::endl;
-        halo = 0.0;
+        HaloInferrer inferrer(script_path);
+        halo = inferrer.infer_halo();
+        if (halo == 0.0) {
+            std::cerr << "Warning: no DRC distance parameters found in script, using 0 halo"
+                      << std::endl;
+        }
     }
 
     // --- Phase 3: Setup engine + MPI bindings ---
@@ -101,8 +106,8 @@ int run_master(int argc, char* argv[]) {
             for (int x = 0; x < tile_config.nx; x++) {
                 db::Coord x1 = bbox.left() + (db::Coord)(tile_w * x);
                 db::Coord y1 = bbox.bottom() + (db::Coord)(tile_h * y);
-                db::Coord x2 = (x == tile_config.nx - 1) ? bbox.right() : (db::Coord)(tile_w * (x + 1));
-                db::Coord y2 = (y == tile_config.ny - 1) ? bbox.top() : (db::Coord)(tile_h * (y + 1));
+                db::Coord x2 = (x == tile_config.nx - 1) ? bbox.right() : (db::Coord)(bbox.left() + tile_w * (x + 1));
+                db::Coord y2 = (y == tile_config.ny - 1) ? bbox.top() : (db::Coord)(bbox.bottom() + tile_h * (y + 1));
                 ctx.tiles.push_back(db::Box(x1, y1, x2, y2));
             }
         }

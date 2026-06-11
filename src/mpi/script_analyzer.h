@@ -26,6 +26,7 @@ public:
     const std::unordered_map<std::string, RefEntry>& ref_table() const { return m_ref_table; }
 
     bool has_downstream_refs(const std::string& var, int def_line) const;
+    bool has_non_corner_downstream_refs(const std::string& var) const;
     bool is_input_line(int line_num) const;
     std::string get_assigned_var(int line_num) const;
     int num_lines() const { return static_cast<int>(m_lines.size()); }

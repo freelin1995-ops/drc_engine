@@ -1,5 +1,6 @@
 #include "mpi/mpi_binding.h"
 #include "mpi/mpi_serialize.h"
+#include <iostream>
 #include <limits>
 #include <cstring>
 
@@ -21,7 +22,7 @@ void install_newindex_hook(sol::state& lua) {
 
         if (value.is<DRCLayer>() &&
             g_mpi_ctx && g_mpi_ctx->analyzer &&
-            g_mpi_ctx->analyzer->has_downstream_refs(var, -1)) {
+            g_mpi_ctx->analyzer->has_non_corner_downstream_refs(var)) {
             DRCLayer& layer = value.as<DRCLayer&>();
             mpi_scatter_var(var, layer, g_mpi_ctx->tiles, g_mpi_ctx->halo, g_mpi_ctx->dbu);
         }
@@ -101,23 +102,30 @@ void bind_drc_engine_mpi(sol::state& lua, DRCEngine& engine, MPIContext* ctx) {
     layertype["enclosing"] = [](DRCLayer&, const DRCLayer&) {
         return mpi_evaluate_expr(g_current_expr, g_mpi_ctx->num_workers);
     };
-    layertype["extended_out"] = [](DRCLayer&, double) {
-        return mpi_evaluate_expr(g_current_expr, g_mpi_ctx->num_workers);
+    layertype["extended_out"] = [&engine](DRCLayer& self, double d) {
+        double dbu = engine.dbu();
+        return self.extended_out(db::Coord(d / dbu));
     };
-    layertype["extended_in"] = [](DRCLayer&, double) {
-        return mpi_evaluate_expr(g_current_expr, g_mpi_ctx->num_workers);
+    layertype["extended_in"] = [&engine](DRCLayer& self, double d) {
+        double dbu = engine.dbu();
+        return self.extended_in(db::Coord(d / dbu));
     };
-    layertype["centers"] = [](DRCLayer&, double, double) {
-        return mpi_evaluate_expr(g_current_expr, g_mpi_ctx->num_workers);
+    layertype["centers"] = [&engine](DRCLayer& self, double l, double f) {
+        double dbu = engine.dbu();
+        return self.centers(db::Edges::length_type(l / dbu), f);
     };
-    layertype["start_segments"] = [](DRCLayer&, double, double) {
-        return mpi_evaluate_expr(g_current_expr, g_mpi_ctx->num_workers);
+    layertype["start_segments"] = [&engine](DRCLayer& self, double l, double f) {
+        double dbu = engine.dbu();
+        return self.start_segments(db::Edges::length_type(l / dbu), f);
     };
-    layertype["end_segments"] = [](DRCLayer&, double, double) {
-        return mpi_evaluate_expr(g_current_expr, g_mpi_ctx->num_workers);
+    layertype["end_segments"] = [&engine](DRCLayer& self, double l, double f) {
+        double dbu = engine.dbu();
+        return self.end_segments(db::Edges::length_type(l / dbu), f);
     };
-    layertype["extended"] = [](DRCLayer&, double, double, double, double, bool) {
-        return mpi_evaluate_expr(g_current_expr, g_mpi_ctx->num_workers);
+    layertype["extended"] = [&engine](DRCLayer& self, double b, double e, double o, double i, bool join) {
+        double dbu = engine.dbu();
+        return self.extended(db::Coord(b / dbu), db::Coord(e / dbu),
+                            db::Coord(o / dbu), db::Coord(i / dbu), join);
     };
     layertype["enclosing_check"] = [](DRCLayer&, const DRCLayer&, double) {
         return mpi_evaluate_expr(g_current_expr, g_mpi_ctx->num_workers);
@@ -128,11 +136,13 @@ void bind_drc_engine_mpi(sol::state& lua, DRCEngine& engine, MPIContext* ctx) {
     layertype["overlap_check"] = [](DRCLayer&, const DRCLayer&, double) {
         return mpi_evaluate_expr(g_current_expr, g_mpi_ctx->num_workers);
     };
-    layertype["corners_dots"] = [](DRCLayer&, double, sol::optional<double>) {
-        return mpi_evaluate_expr(g_current_expr, g_mpi_ctx->num_workers);
+    layertype["corners_dots"] = [](DRCLayer& self, double a1, sol::optional<double> a2) {
+        return self.corners_dots(a1, a2.value_or(180.0));
     };
-    layertype["corners_boxes"] = [](DRCLayer&, double, sol::optional<double>, sol::optional<double>) {
-        return mpi_evaluate_expr(g_current_expr, g_mpi_ctx->num_workers);
+    layertype["corners_boxes"] = [&engine](DRCLayer& self, double dim, sol::optional<double> a1, sol::optional<double> a2) {
+        double dbu = engine.dbu();
+        db::Coord dim_db = db::Coord(dim / dbu);
+        return self.corners_boxes(dim_db, a1.value_or(-180.0), a2.value_or(180.0));
     };
 
     layertype["count"] = [](DRCLayer& self) -> size_t {
@@ -194,12 +204,25 @@ DRCLayer mpi_evaluate_expr(const std::string& expr, int num_workers) {
     }
 
     std::vector<DRCLayer> tile_results;
+    int error_count = 0;
     for (int i = 0; i < active; i++) {
-        auto msg = mpi_recv(i + 1);
+        int worker_rank = i + 1;
+        auto msg = mpi_recv(worker_rank);
+        if (msg.header.type == (int32_t)MPIMsgType::WORKER_ERROR) {
+            std::string err(msg.payload.begin(), msg.payload.end());
+            std::cerr << "Warning: tile " << i << " (rank " << worker_rank
+                      << ") failed: " << err << std::endl;
+            error_count++;
+            continue;
+        }
         if (msg.header.size > 0) {
             auto layer = deserialize_drclayer(msg.payload.data(), msg.payload.size());
             tile_results.push_back(std::move(layer));
         }
+    }
+    if (error_count > 0) {
+        std::cerr << "Warning: " << error_count << "/" << active
+                  << " tiles failed for expression: " << expr << std::endl;
     }
 
     if (tile_results.empty()) return DRCLayer();

@@ -29,8 +29,13 @@ int run_worker() {
                 "return " + expr, sol::script_pass_on_error);
             if (!result.valid()) {
                 sol::error err = result;
-                std::cerr << "Worker RHS error: " << err.what() << std::endl;
-                mpi_send(0, MPIMsgType::EXECUTE_RHS, nullptr, 0);
+                int rank;
+                MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+                std::string err_msg = "rank " + std::to_string(rank) +
+                    " | " + expr + " | " + err.what();
+                std::cerr << "Worker RHS error: " << err_msg << std::endl;
+                mpi_send(0, MPIMsgType::WORKER_ERROR,
+                         err_msg.data(), (int)err_msg.size());
                 break;
             }
 

@@ -53,16 +53,76 @@ ScriptAnalyzer::ScriptAnalyzer(const std::string& script_path) {
     m_valid = true;
 }
 
+static std::vector<std::string> split_logical_lines(const std::string& line) {
+    std::vector<std::string> result;
+    std::string current;
+    int depth = 0;
+    char str_char = 0;
+
+    for (size_t i = 0; i < line.size(); i++) {
+        char c = line[i];
+
+        if (str_char) {
+            current += c;
+            if (c == str_char && (i == 0 || line[i-1] != '\\'))
+                str_char = 0;
+            continue;
+        }
+
+        if (c == '"' || c == '\'') {
+            current += c;
+            str_char = c;
+            continue;
+        }
+
+        if (c == '(' || c == '[') {
+            depth++;
+            current += c;
+            continue;
+        }
+        if (c == ')' || c == ']') {
+            depth--;
+            current += c;
+            continue;
+        }
+
+        // -- starts a comment; rest of line is ignored
+        if (c == '-' && i + 1 < line.size() && line[i+1] == '-') {
+            current += line.substr(i);
+            break;
+        }
+
+        if (c == ';' && depth == 0) {
+            std::string trimmed = trim(current);
+            if (!trimmed.empty() && trimmed.find("--") != 0)
+                result.push_back(trimmed);
+            current.clear();
+            continue;
+        }
+
+        current += c;
+    }
+
+    std::string trimmed = trim(current);
+    if (!trimmed.empty() && trimmed.find("--") != 0)
+        result.push_back(trimmed);
+
+    return result;
+}
+
 void ScriptAnalyzer::split_lines(const std::string& script) {
     m_original_lines.clear();
     std::stringstream ss(script);
     std::string line;
     while (std::getline(ss, line)) {
         std::string trimmed = trim(line);
-        if (is_comment_or_empty(trimmed)) continue;
-        LineInfo li;
-        li.text = trimmed;
-        m_original_lines.push_back(li);
+        if (trimmed.find("--") == 0 || trimmed.empty()) continue;
+        auto logical_lines = split_logical_lines(trimmed);
+        for (const auto& ll : logical_lines) {
+            LineInfo li;
+            li.text = ll;
+            m_original_lines.push_back(li);
+        }
     }
 }
 
@@ -282,6 +342,26 @@ bool ScriptAnalyzer::has_downstream_refs(const std::string& var, int def_line) c
         return !entry.ref_lines.empty();
     for (int ref : entry.ref_lines) {
         if (ref > def_line)
+            return true;
+    }
+    return false;
+}
+
+bool ScriptAnalyzer::has_non_corner_downstream_refs(const std::string& var) const {
+    auto it = m_ref_table.find(var);
+    if (it == m_ref_table.end())
+        return false;
+    const auto& entry = it->second;
+    for (int ref : entry.ref_lines) {
+        const auto& text = m_lines[ref].text;
+        if (text.find(":corners_dots(") == std::string::npos &&
+            text.find(":corners_boxes(") == std::string::npos &&
+            text.find(":extended_out(") == std::string::npos &&
+            text.find(":extended_in(") == std::string::npos &&
+            text.find(":extended(") == std::string::npos &&
+            text.find(":centers(") == std::string::npos &&
+            text.find(":start_segments(") == std::string::npos &&
+            text.find(":end_segments(") == std::string::npos)
             return true;
     }
     return false;

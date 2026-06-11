@@ -213,19 +213,21 @@ DRCLayer deserialize_drclayer(const char* data, size_t size) {
             return deserialize_gds2_region(data + 5, static_cast<size_t>(gds_size));
         }
         case DRCLayer::Edges: {
-            int32_t custom_size = static_cast<int32_t>(size - 5);
-            if (custom_size < 4) return DRCLayer();
+            if (size < 5) return DRCLayer();
             int32_t count;
             std::memcpy(&count, data + 1, 4);
+            if (count < 0) return DRCLayer();
             if (count == 0) return DRCLayer(new db::Edges());
+            if (static_cast<int32_t>(size) < 5 + count * 16) return DRCLayer();
             return deserialize_edges_custom(data + 1, static_cast<size_t>(size - 1));
         }
         case DRCLayer::EdgePairs: {
-            int32_t custom_size = static_cast<int32_t>(size - 5);
-            if (custom_size < 4) return DRCLayer();
+            if (size < 5) return DRCLayer();
             int32_t count;
             std::memcpy(&count, data + 1, 4);
+            if (count < 0) return DRCLayer();
             if (count == 0) return DRCLayer(new db::EdgePairs());
+            if (static_cast<int32_t>(size) < 5 + count * 32) return DRCLayer();
             return deserialize_edgepairs_custom(data + 1, static_cast<size_t>(size - 1));
         }
         case DRCLayer::Texts: {

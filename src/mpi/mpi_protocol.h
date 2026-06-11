@@ -8,9 +8,10 @@
 namespace drc {
 
 enum class MPIMsgType : int {
-    EXECUTE_RHS = 0,
-    UPDATE_VAR  = 1,
-    DONE        = 2,
+    EXECUTE_RHS  = 0,
+    UPDATE_VAR   = 1,
+    DONE         = 2,
+    WORKER_ERROR = 3,
 };
 
 #pragma pack(push, 1)

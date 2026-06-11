@@ -87,52 +87,64 @@ DRCLayer DRCLayer::operator^(const DRCLayer& other) const {
 
 // DRC checks
 DRCLayer DRCLayer::width_check(double d) const {
+    if (!m_region) return DRCLayer();
     return DRCLayer(new db::EdgePairs(m_region->width_check(db::Coord(d))));
 }
 
 DRCLayer DRCLayer::space_check(double d) const {
+    if (!m_region) return DRCLayer();
     return DRCLayer(new db::EdgePairs(m_region->space_check(db::Coord(d))));
 }
 
 DRCLayer DRCLayer::notch_check(double d) const {
+    if (!m_region) return DRCLayer();
     return DRCLayer(new db::EdgePairs(m_region->notch_check(db::Coord(d))));
 }
 
 DRCLayer DRCLayer::enclosure_check(const DRCLayer& inner, double d) const {
+    if (!m_region || !inner.m_region) return DRCLayer();
     return DRCLayer(new db::EdgePairs(m_region->enclosing_check(*inner.m_region, db::Coord(d))));
 }
 
 DRCLayer DRCLayer::separation_check(const DRCLayer& other, double d) const {
+    if (!m_region || !other.m_region) return DRCLayer();
     return DRCLayer(new db::EdgePairs(m_region->separation_check(*other.m_region, db::Coord(d))));
 }
 
 DRCLayer DRCLayer::overlap_check(const DRCLayer& other, double d) const {
+    if (!m_region || !other.m_region) return DRCLayer();
     return DRCLayer(new db::EdgePairs(m_region->overlap_check(*other.m_region, db::Coord(d))));
 }
 
 // Geometry transforms
 DRCLayer DRCLayer::sized(double d) const {
+    if (!m_region) return DRCLayer();
     return DRCLayer(new db::Region(m_region->sized(db::Coord(d))));
 }
 
 DRCLayer DRCLayer::sized(double dx, double dy) const {
+    if (!m_region) return DRCLayer();
     return DRCLayer(new db::Region(m_region->sized(db::Coord(dx), db::Coord(dy))));
 }
 
 DRCLayer DRCLayer::merge() const {
+    if (!m_region) return DRCLayer();
     return DRCLayer(new db::Region(m_region->merged()));
 }
 
 DRCLayer DRCLayer::edges_op() const {
+    if (!m_region) return DRCLayer();
     return DRCLayer(new db::Edges(m_region->edges()));
 }
 
 DRCLayer DRCLayer::corners_dots(double angle_min, double angle_max) const {
+    if (!m_region) return DRCLayer();
     return DRCLayer(new db::Edges(m_region->processed(
         db::CornersAsDots(angle_min, true, angle_max, true, false, false))));
 }
 
 DRCLayer DRCLayer::corners_boxes(double dim, double angle_min, double angle_max) const {
+    if (!m_region) return DRCLayer();
     return DRCLayer(new db::Region(m_region->processed(
         db::CornersAsRectangles(angle_min, true, angle_max, true, false, false, db::Coord(dim)))));
 }
@@ -175,46 +187,55 @@ DRCLayer DRCLayer::enclosing(const DRCLayer& other) const {
 
 // Edge operations (only on Edges type)
 DRCLayer DRCLayer::extended_out(double d) const {
+    if (!m_edges) return DRCLayer();
     db::Region out;
     m_edges->extended(out, 0, 0, db::Coord(d), 0, false);
     return DRCLayer(new db::Region(out));
 }
 
 DRCLayer DRCLayer::extended_in(double d) const {
+    if (!m_edges) return DRCLayer();
     db::Region out;
     m_edges->extended(out, 0, 0, 0, db::Coord(d), false);
     return DRCLayer(new db::Region(out));
 }
 
 DRCLayer DRCLayer::extended(double b, double e, double o, double i, bool join) const {
+    if (!m_edges) return DRCLayer();
     db::Region out;
     m_edges->extended(out, db::Coord(b), db::Coord(e), db::Coord(o), db::Coord(i), join);
     return DRCLayer(new db::Region(out));
 }
 
 double DRCLayer::length() const {
+    if (!m_edges) return 0.0;
     return m_edges->length();
 }
 
 DRCLayer DRCLayer::centers(double l, double f) const {
+    if (!m_edges) return DRCLayer();
     return DRCLayer(new db::Edges(m_edges->centers(db::Edges::length_type(l), f)));
 }
 
 DRCLayer DRCLayer::start_segments(double l, double f) const {
+    if (!m_edges) return DRCLayer();
     return DRCLayer(new db::Edges(m_edges->start_segments(db::Edges::length_type(l), f)));
 }
 
 DRCLayer DRCLayer::end_segments(double l, double f) const {
+    if (!m_edges) return DRCLayer();
     return DRCLayer(new db::Edges(m_edges->end_segments(db::Edges::length_type(l), f)));
 }
 
 // Filters
 DRCLayer DRCLayer::with_area(double min_a, double max_a) const {
+    if (!m_region) return DRCLayer();
     return DRCLayer(new db::Region(m_region->filtered(
         db::RegionAreaFilter(db::Region::area_type(min_a), db::Region::area_type(max_a), false))));
 }
 
 DRCLayer DRCLayer::with_perimeter(double min_p, double max_p) const {
+    if (!m_region) return DRCLayer();
     return DRCLayer(new db::Region(m_region->filtered(
         db::RegionPerimeterFilter(db::Region::perimeter_type(min_p), db::Region::perimeter_type(max_p), false))));
 }

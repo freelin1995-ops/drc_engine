@@ -283,6 +283,116 @@ lib, top = make_layout("klayout_setup")
 top.add(gdstk.rectangle((0, 0), (1, 1), layer=1, datatype=0))
 write_layout(lib, "klayout_setup")
 
+# ================================================================
+# Layout 19: Tile boundary test — shapes crossing tile boundaries
+# Used for MPI tiling verification. With 2x2 tiling centered at
+# (0,0), each quadrant is one tile.
+#
+# Layer 10/0: big cross-centered rect (-0.5,-0.5)-(0.5,0.5)
+#   → crosses from tile NW/NE/SW/SE at center, area=1um²
+# Layer 11/0: four corner rects in each quadrant
+#   (-1.5,-1.5)-(-0.6,-0.6), (0.6,0.6)-(1.5,1.5),
+#   (-1.5,0.6)-(-0.6,1.5), (0.6,-1.5)-(1.5,-0.6)
+# Layer 12/0: thin vertical rect crossing y=0
+#   (-0.03,-1)-(0.03,1) — crosses tile boundary at y=0
+# Layer 13/0: thin horizontal rect crossing x=0
+#   (-1,-0.03)-(1,0.03) — crosses tile boundary at x=0
+# ================================================================
+lib, top = make_layout("tile_boundary_test")
+top.add(gdstk.rectangle((-0.5, -0.5), (0.5, 0.5), layer=10, datatype=0))
+top.add(gdstk.rectangle((-1.5, -1.5), (-0.6, -0.6), layer=11, datatype=0))  # SW
+top.add(gdstk.rectangle((0.6, 0.6), (1.5, 1.5), layer=11, datatype=0))      # NE
+top.add(gdstk.rectangle((-1.5, 0.6), (-0.6, 1.5), layer=11, datatype=0))    # NW
+top.add(gdstk.rectangle((0.6, -1.5), (1.5, -0.6), layer=11, datatype=0))    # SE
+top.add(gdstk.rectangle((-0.03, -1), (0.03, 1), layer=12, datatype=0))
+top.add(gdstk.rectangle((-1, -0.03), (1, 0.03), layer=13, datatype=0))
+write_layout(lib, "tile_boundary_test")
+
+# ================================================================
+# Layout 20: Exact DRC boundary values
+# Layer 10/0: rect (0,0)-(2,2) width=2um
+# Layer 11/0: thin rect (0,0)-(0.3,2) width=0.3um
+# Layer 12/0,13/0: gap test — two rects gap=0.5um
+#   layer12: (0,0)-(2,2), layer13: (2.5,0)-(4.5,2)
+# Layer 14/0,15/0: touching rects gap=0
+#   layer14: (5,0)-(7,2), layer15: (7,0)-(9,2)
+# Layer 20/0,21/0: enclosure margin=0.5um
+#   layer20 outer (0,0)-(3,3)
+#   layer21 inner (0.5,0.5)-(2.5,2.5)
+# Layer 22/0,23/0: enclosure margin=0.2um (violation at 0.5 threshold)
+#   layer22 outer (4,0)-(7,3)
+#   layer23 inner (4.5,0.5)-(6.8,2.5)
+# Layer 30/0,31/0: overlap margin=0.5um
+#   layer30: (0,0)-(2,2), layer31: (1.5,0.5)-(4,3)
+# Layer 40/0: C-shape for notch check — notch at center
+#   shape with known notch width=0.3 and depth=0.5
+# ================================================================
+lib, top = make_layout("drc_exact")
+# Layer 10: 2um wide rect
+top.add(gdstk.rectangle((0, 0), (2, 2), layer=10, datatype=0))
+# Layer 11: 0.3um thin rect
+top.add(gdstk.rectangle((0, 0), (0.3, 2), layer=11, datatype=0))
+# Layer 12,13: gap=0.5
+top.add(gdstk.rectangle((0, 0), (2, 2), layer=12, datatype=0))
+top.add(gdstk.rectangle((2.5, 0), (4.5, 2), layer=13, datatype=0))
+# Layer 14,15: touching gap=0
+top.add(gdstk.rectangle((5, 0), (7, 2), layer=14, datatype=0))
+top.add(gdstk.rectangle((7, 0), (9, 2), layer=15, datatype=0))
+# Layer 20,21: enclosure margin=0.5
+top.add(gdstk.rectangle((0, 0), (3, 3), layer=20, datatype=0))
+top.add(gdstk.rectangle((0.5, 0.5), (2.5, 2.5), layer=21, datatype=0))
+# Layer 22,23: enclosure margin=0.2
+top.add(gdstk.rectangle((4, 0), (7, 3), layer=22, datatype=0))
+top.add(gdstk.rectangle((4.5, 0.5), (6.8, 2.5), layer=23, datatype=0))
+# Layer 30,31: overlap margin=0.5
+top.add(gdstk.rectangle((0, 0), (2, 2), layer=30, datatype=0))
+top.add(gdstk.rectangle((1.5, 0.5), (4, 3), layer=31, datatype=0))
+# Layer 40: C-shape for notch
+# U-shape with a notch at top: outer rect (0,0)-(3,2) with cutout (1,0.3)-(2,2)
+# This creates a 1um wide, 1.7um deep notch
+cshape = gdstk.Polygon([
+    (0, 0), (0, 2), (3, 2), (3, 0),
+], layer=40, datatype=0)
+# Cut a notch: remove (1,0.3)-(2,2) from interior to create a C-shape
+# Actually, we need a C-shape which is NOT self-intersecting. Let me use a simple
+# polygon that forms a C/U shape with a notch:
+notch_poly = gdstk.Polygon([
+    (0, 0), (0, 2), (1, 2), (1, 0.3), (2, 0.3), (2, 2), (3, 2), (3, 0)
+], layer=40, datatype=0)
+top.add(cshape)
+top.add(notch_poly)
+write_layout(lib, "drc_exact")
+
+# ================================================================
+# Layout 21: Edge and EdgePair type ops
+# Layer 10/0: rect (0,0)-(2,2)
+# Layer 11/0: rect (1,1)-(3,3)  → Edges(10) & Edges(11) possible
+# Layer 60/0: complex polygon with known angles
+#   A polygon with 45° edges for extended testing
+# ================================================================
+lib, top = make_layout("edge_type_ops")
+top.add(gdstk.rectangle((0, 0), (2, 2), layer=10, datatype=0))
+top.add(gdstk.rectangle((1, 1), (3, 3), layer=11, datatype=0))
+# Layer 60: polygon with 45-degree edge
+poly45 = gdstk.Polygon([
+    (0, 0), (2, 0), (3, 1), (3, 3), (1, 3), (0, 2)
+], layer=60, datatype=0)
+top.add(poly45)
+write_layout(lib, "edge_type_ops")
+
+# ================================================================
+# Layout 22: Empty and edge-case layouts
+# Layer 10/0: single rect at far coordinates
+# Layer 20/0: zero-width? (can't do zero width in GDS)
+# Just a nearly-zero width rect: (0,0)-(0.001,2) width=1nm
+# Layer 30/0: very large rect (0,0)-(100,100)
+# ================================================================
+lib, top = make_layout("extreme_geometry")
+top.add(gdstk.rectangle((0, 0), (0.001, 2), layer=10, datatype=0))  # 1nm wide
+top.add(gdstk.rectangle((1000, 1000), (1100, 1100), layer=20, datatype=0))  # far away
+top.add(gdstk.rectangle((0, 0), (100, 100), layer=30, datatype=0))  # very large
+write_layout(lib, "extreme_geometry")
+
 print(f"Generated {len(os.listdir(OUTDIR))} test layouts in {OUTDIR}")
 for f in sorted(os.listdir(OUTDIR)):
     lib = gdstk.read_gds(os.path.join(OUTDIR, f))
